@@ -21,6 +21,8 @@ Open `index.html` in a browser — no build step, no dependencies (WebGL + WebAu
 | [ | Tube — macro view of a CRT shadow mask; the cursor shades the phosphors |
 | ] | Vector — retro vector tunnel with interlace and glitches |
 
+See [PROMPTS.md](PROMPTS.md) for detailed prompts to recreate every style.
+
 Music styles (♪ menu): Downtempo, Upbeat, Demoscene, Math rock, Acid jazz, Aurora, Grid. `M` toggles sound.
 
 ## Origami tooling (`tools/origami`)
