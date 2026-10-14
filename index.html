@@ -161,6 +161,10 @@ html[data-mode="vector"]{
   --scrim:rgba(0,2,5,.6);
   --f-display:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
 }
+html[data-mode="vector"][data-vpal="0"]{--fg:#d9ffd6;--muted:#8fbf88;--accent:#3dff6e;--cyan:#3dff6e;--hot:#a8ff8c;--line:rgba(61,255,110,.28);--sh1:rgba(61,255,110,.5);--sh2:rgba(61,255,110,.3);transition:none}
+html[data-mode="vector"][data-vpal="1"]{--fg:#ffe9c8;--muted:#c9a06a;--accent:#ffa51f;--cyan:#ffa51f;--hot:#ffd166;--line:rgba(255,165,31,.28);--sh1:rgba(255,165,31,.5);--sh2:rgba(255,165,31,.3);transition:none}
+html[data-mode="vector"][data-vpal="2"]{--fg:#eaffff;--muted:#9fd6d6;--accent:#55ffff;--cyan:#55ffff;--hot:#ff55ff;--line:rgba(85,255,255,.28);--sh1:rgba(85,255,255,.5);--sh2:rgba(85,255,255,.3);transition:none}
+html[data-mode="vector"][data-vpal="3"]{--fg:#f2f2ff;--muted:#a3a3d9;--accent:#5555ff;--cyan:#5555ff;--hot:#ffff55;--line:rgba(85,85,255,.28);--sh1:rgba(85,85,255,.5);--sh2:rgba(85,85,255,.3);transition:none}
 html[data-mode="origami"]{
   --bg:#000;
   --fg:#f4efe6;
@@ -1198,7 +1202,7 @@ varying float vE; varying vec3 vCol;
 void main(){ float a=1.-smoothstep(.3,1.,abs(vE)); gl_FragColor=vec4(vCol*a,1.); }`;
   const VEC_POST_FS = `
 precision highp float;
-uniform sampler2D uTex; uniform vec2 uRes, uLow; uniform float uTime, uGl, uField;
+uniform sampler2D uTex; uniform vec2 uRes, uLow; uniform float uTime, uGl, uField; uniform vec3 uTint;
 varying vec2 vUv;
 float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 void main(){
@@ -1222,11 +1226,17 @@ void main(){
   c*=mod(floor(ry)+uField,2.)<.5?1.:.78;
   // background noise of the tube: fine, flickering grain that lifts the black slightly; heavier snow in glitches
   float n=hash(floor(gl_FragCoord.xy/1.5)+fract(uTime*7.31)*137.);
-  c+=vec3(.75,.9,1.)*n*.05+(n-.5)*.14*uGl;
+  c+=uTint*n*.05+(n-.5)*.14*uGl;
   vec2 v=vUv-.5;
   c*=1.-dot(v,v)*.9;
   gl_FragColor=vec4(max(c,0.),1.);
 }`;
+  // green phosphor CRT · amber CRT · CGA (cyan / magenta / white) · EGA (blue / yellow / light red)
+  const VEC_PAL = [
+    [[.2, 1, .3], [.65, 1, .55], [.12, .6, .18]],
+    [[1, .6, .08], [1, .82, .35], [.7, .36, .04]],
+    [[.33, 1, 1], [1, .33, 1], [1, 1, 1]],
+    [[.33, .33, 1], [1, 1, .33], [1, .33, .33]]];
   const vec = {buf: null, data: new Float32Array(6 * 6 * 4200), travel: 0, sc: 0, sv: 0, burst: 0, nextBurst: 2, fbo: null, tex: null, tw: 0, th: 0};
   function vecTarget(w, h) {
     if (vec.tw === w && vec.th === h) return;
@@ -1305,13 +1315,15 @@ void main(){
       const ct = Math.cos(tw), st = Math.sin(tw), breathe = 1 + .06 * Math.sin(z * .2 + time * 2) * (1 + pulse);
       rings.push(sec.map(([x, y]) => [C[0] + (x * ct - y * st) * R * breathe, C[1] + (x * st + y * ct) * R * breathe, z]));
     }
-    const cyan = [.22, 1, .32], hot = [1, .62, .1];   // green phosphor with amber accent rings
+    // one retro palette per slide: [main, accent, third]; blended only while the slide changes
+    const pal = VEC_PAL[k0].map((c, i) => c.map((x, j) => x + (VEC_PAL[k1][i][j] - x) * mts));
+    const [cyan, hot, third] = pal;
     const build = () => {
       o = 0;
       for (let r = 0; r < rings.length; r++) {
         const ring = rings[r], zi = Math.round(ring[0][2] / STEP), accent = ((zi % 10) + 10) % 10 === 0;
         for (let i = 0; i < N; i++) {
-          seg(ring[i], ring[(i + 1) % N], accent ? hot : (((zi % 5) + 5) % 5 === 0 ? [1, .3, .15] : cyan), accent ? 1.5 : .9);
+          seg(ring[i], ring[(i + 1) % N], accent ? hot : (((zi % 5) + 5) % 5 === 0 ? third : cyan), accent ? 1.5 : .9);
           if (r + 1 < rings.length) seg(ring[i], rings[r + 1][i], cyan, .6);
         }
       }
@@ -1363,6 +1375,8 @@ void main(){
     gl.bindTexture(gl.TEXTURE_2D, vec.tex); gl.uniform1i(PP.u.uTex, 0);
     gl.uniform2f(PP.u.uRes, W, H);
     gl.uniform2f(PP.u.uLow, lw, lh);
+    gl.uniform3fv(PP.u.uTint, cyan.map(x => .4 + .6 * x));
+    { const de = document.documentElement; if (de.dataset.vpal !== String(sl)) de.dataset.vpal = sl; }
     vec.field = 1 - (vec.field || 0); gl.uniform1f(PP.u.uField, vec.field);
     gl.uniform1f(PP.u.uTime, time);
     gl.uniform1f(PP.u.uGl, reduce ? 0 : gl2);
@@ -4012,7 +4026,7 @@ void main(){
     try { history.replaceState(null, '', '#' + m); } catch (e) {}
     modeBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === m ? 'true' : 'false'));
     root.classList.remove('grab');
-    lensInit = false; dragOff.x = dragOff.y = 0; drag = null; oView.drag = oView.pinch = null; root.classList.remove('dragging');
+    delete root.dataset.vpal; lensInit = false; dragOff.x = dragOff.y = 0; drag = null; oView.drag = oView.pinch = null; root.classList.remove('dragging');
     resize();
     if (gl) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H); gl.clear(gl.COLOR_BUFFER_BIT); }
   }
